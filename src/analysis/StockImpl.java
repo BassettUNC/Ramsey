@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Scanner;
 
+//TODO: Create date object. Stop using string.
+
 public class StockImpl implements Stock{
 
     // Initialize local variable.
@@ -58,6 +60,7 @@ public class StockImpl implements Stock{
             _stock.put(date, new ArrayList<Double>(temp));
             n = 0;
             temp.clear();
+            csvLine.close();
         }
         csvReader.close();
     }
