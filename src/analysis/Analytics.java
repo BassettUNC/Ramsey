@@ -17,12 +17,14 @@ public class Analytics {
         try {
             csvReader = new Scanner(new File(path));
         } catch (FileNotFoundException e) {
+            System.out.println("ERROR: Cannot find futures csv.");
             e.printStackTrace();
         }
 
         // Initialize temporary ArrayList and local variables.
         ArrayList<Stock> tempTickers = new ArrayList<>();
-        int n = 0; // Row number. Resets for each firm.
+        ArrayList<String> allTickers = new ArrayList<>(); // Contains tickers of all created stock objects.
+        Integer n = null; // Row number. Resets for each firm.
         int i = 0; // Cell number. Resets each row.
         String controlDate = null;
         String workingDate = null;
@@ -34,15 +36,22 @@ public class Analytics {
 
             // Define first cell of each line as identifier. Will either be firm abbreviation or date.
             String identifier = csvLine.next();
-
-            // TODO: Determine why identifier length is different.
-            //If identifier is firm abbreviation...
-            if (identifier.length() == 3 || identifier.length() == 2) {
-                System.out.println(identifier.length());
+            // If identifier is firm abbreviation...
+            // For unknown reason, length of first cell is one longer than it should be... or statement accounts for this.
+            if ((identifier.length() == 3 && n == null) || identifier.length() == 2) {
                 while (csvLine.hasNext()) {
-                    // TODO: Determine if object already exists.
-                    // Create stock objects and add to list.
-                    tempTickers.add(new StockImpl("src/analysis/data/" + csvLine.next() + ".csv"));
+                    String ticker = csvLine.next();
+
+                    // If stock object doesn't already exist try creating new one from csv...
+                    if(!allTickers.contains(ticker)) {
+                        try {
+                            allTickers.add(ticker);
+                            // Create stock objects and add to list.
+                            tempTickers.add(new StockImpl("src/analysis/data/" + ticker + ".csv"));
+                        } catch(NullPointerException e) {
+                            System.out.println("ERROR: Cannot find Stock csv file.");
+                        }
+                    }
                 }
                 n = 0;
 
@@ -52,19 +61,22 @@ public class Analytics {
 
                 // Otherwise, iterate through each cell and compare to predicted value.
             } else {
-                while(csvLine.hasNext()) {
-                    if (i == 0) {
-                        workingDate = identifier;
+                try {
+                    while(csvLine.hasNext()) {
+                        if (i == 0) {
+                            workingDate = identifier;
+                        }
+                        // If performance > predicted.
+                        //TODO: Automatically find nearest date.
+                        if (stockPerformance(controlDate, workingDate, tempTickers.get(i)) >= Double.parseDouble(csvLine.next())) {
+                            System.out.println("Growth exceeds or meets prediction from " + controlDate + " to " + workingDate + ".");
+                        } else {
+                            System.out.println("Prediction exceeds growth from " + controlDate + " to " + workingDate + ".");
+                        }
+                        i++;
                     }
-                    // If performance > predicted.
-                    //TODO: Add error messages for missing file / date.
-                    //TODO: Automatically find nearest date.
-                    if (stockPerformance(controlDate, workingDate, tempTickers.get(i)) >= Double.parseDouble(csvLine.next())) {
-                        System.out.println("Growth exceeds or meets prediction from " + controlDate + " to " + workingDate + ".");
-                    } else {
-                        System.out.println("Prediction exceeds growth from " + controlDate + " to " + workingDate + ".");
-                    }
-                    i ++;
+                } catch (NullPointerException e) {
+                    System.out.println("ERROR: Date NOT Found in Stock csv.");
                 }
             }
             i = 0;
