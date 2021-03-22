@@ -2,11 +2,12 @@ package analysis;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Scanner;
-
-//TODO: Create date object. Stop using string.
 
 public class StockImpl implements Stock{
 
