@@ -1,23 +1,29 @@
 package analysis;
 
+import com.sun.source.tree.Tree;
+
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.PrintWriter;
+import java.security.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Scanner;
+import java.util.*;
 
 public class Analytics {
     public static void main(String[] args) {
-        //TODO: For now stock history must be preloaded, need to fetch automatically from online API.
-        relatePrediction("src/analysis/data/Futures.csv");
-        dateConversion("2019-01-02");
+        completeComparison(parsePrediction("src/analysis/data/Forecasts.csv"));
     }
 
-    private static void relatePrediction(String path) {
+
+    /**
+     * This method traverses a forecasts csv and passes
+     * data to scoring methods in a systematic manner.
+     * It reads each row individually and iterates through
+     * the rows columns.
+     * @param path Path to the forecast csv.
+     * @return Arraylist of all results.
+     */
+    private static ArrayList<Result> parsePrediction(String path) {
         // Create scanner line object if file exists. Otherwise, die.
         Scanner csvReader = null;
         try {
@@ -41,6 +47,9 @@ public class Analytics {
         String controlDate = null;
         String workingDate = null;
         String firm = null;
+
+        ArrayList<Result> results = new ArrayList<>();
+
 
         // Begin Readings csv file.
         while (csvReader.hasNextLine()) {
@@ -93,9 +102,8 @@ public class Analytics {
                         Stock tickerStock = tickers.get(tempTickers.get(i));
                         String tickerString = tempTickers.get(i);
 
-                        directComparison(controlDate, workingDate, predicted, tickerStock, tickerString, firm);
-                        // TODO: call comparison class once. store all data here in hashmap.
-
+                        // Add results of directComparison to array.
+                        results.add(directComparison(controlDate, workingDate, predicted, tickerStock, tickerString, firm));
                         i++; // increase counter for cell #.
                     }
                 } catch (NullPointerException e) {
@@ -107,10 +115,15 @@ public class Analytics {
             n ++; // Increase counter for line number.
         }
         csvReader.close();
+        return results;
     }
 
-    // NOT CURRENTLY USED!
-    // Convert date String to object of type Date.
+
+    /**
+     * Convert date as string object to Date object
+     * @param date Date as a string.
+     * @return Date as a Date object.
+     */
     private static Date dateConversion(String date) {
         try {
             return new SimpleDateFormat("yyyy-MM-dd").parse(date);
@@ -122,12 +135,31 @@ public class Analytics {
         }
     }
 
-    // Return percent growth or loss. Requires start date, end date, and ticker.
+
+    /**
+     * Return percent growth or loss for a stock over the start and stop dates.
+     * @param start The start date for the comparison.
+     * @param stop The end date for the comparison.
+     * @param ticker The stock to retrieve performance metrics on.
+     * @return Percent stock growth or loss.
+     */
     private static Double stockPerformance(String start, String stop, Stock ticker) {
         return (ticker.close(stop) - ticker.close(start))/ticker.close(start);
     }
 
-    private static void directComparison(String controlDate, String workingDate, Double prediction,
+
+    /**
+     * Compares stock prediction with historical stock performance
+     * over a given time period.
+     * @param controlDate The date the stock prediction was issued. The beginning.
+     * @param workingDate The stop date. Where stock should be at predicted value.
+     * @param prediction Stock's predicted growth or loss.
+     * @param tickerO Ticker as stock object.
+     * @param tickerS Ticker as string object.
+     * @param firm Firm who made the prediction.
+     * @return Type Result Contains: id (created from unix stamp), firm, ticker, score, date, comments, flags.
+     */
+    private static Result directComparison(String controlDate, String workingDate, Double prediction,
                                          Stock tickerO, String tickerS, String firm) {
 
         // Find difference between how the stock performed and how it was predicted to preform.
@@ -138,7 +170,6 @@ public class Analytics {
 
         // Initialize List to keep track of prediction comments.
         ArrayList<String> comments = new ArrayList<>();
-
         // Initialize List to keep track of flags.
         ArrayList<String> flags = new ArrayList<>();
 
@@ -204,10 +235,191 @@ public class Analytics {
                 score = 5;
             }
         }
-        logScore(firm, tickerS, score, comments, flags);
+
+        // Return type result
+        return new Result(System.nanoTime(), firm, tickerS, score, workingDate, comments, flags);
     }
 
-    private static void logScore (String firm, String ticker, int score, ArrayList<String> comments, ArrayList<String> flags) {
+
+    /**
+     * Calls methods used to compare stock scores to one another.
+     * Used to generate score modifiers.
+     * @param results requires an arraylist of of objects type result.
+     */
+    public static void completeComparison(ArrayList<Result> results) {
+        //If an investment firm goes against others and is correct: increase score.
+        //If an investment firm goes against others and is incorrect: decrease score.
+        Double fvfINC = 1.1;
+        Double fvfDEC = 0.8;
+        firmVsFirm(results, fvfINC, fvfDEC);
+
+        // TODO: If all investment firms report a loss: increase score.
+        // TODO: If a firm's past predictions on a stock are good: increase score.
+        // TODO: If a firm's past predictions on a stock are bad: decrease score.
+        // TODO: If a firm’s overall rating (reputation) is high: increase score.
+        // TODO: If stock has been historically nonvolatile, and a firm’s prediction is bad: decrease score.
+        // TODO: If stock has been historically volatile, and a firm’s prediction is good: increase score.
+
+        //To print results.
+        viewResult(results);
+    }
+
+    /**
+     * Compares one firms performance on a specific stock to others.
+     * If an investment firm goes against others and is correct: increase score.
+     * If an investment firm goes against others and is incorrect: decrease score.
+     * @param results An array of type results.
+     * @param incMod Modifier used to increase score when performance is better than most.
+     * @param decMod Modifier used to decrease score performance is worse than most.
+     */
+    private static void firmVsFirm(ArrayList<Result> results, Double incMod, Double decMod) {
+        ArrayList<String> workingTickers = new ArrayList<>();
+        ArrayList<String> workingDates = new ArrayList<>();
+
+        // Build list of tickers and included dates
+        for (int i = 0 ; i < results.size(); i ++) {
+            if (!workingTickers.contains(results.get(i).ticker())) {
+                workingTickers.add(results.get(i).ticker());
+            }
+            if (!workingDates.contains(results.get(i).date())) {
+                workingDates.add(results.get(i).date());
+            }
+        }
+
+        // Initialize temp array to hold index values of all scores for particular ticker in results array.
+        ArrayList<Integer> currentCompareTicker = new ArrayList<>();
+
+        //Initialize temp TreeMap (must be sorted) to hold stock score, id pairs.
+        TreeMap<Double, List<Long>> ccd = new TreeMap<>();
+
+        // Initialize temp list to hold scores for particular ticker that share the same date in results array.
+        List<Double> ccdList = new ArrayList<>();
+
+        // Traverse each ticker found in results array.
+        for (int i = 0 ; i < workingTickers.size(); i ++) {
+            // Create currentCompareTicker.
+            for (int n = 0; n < results.size(); n++) {
+                if (workingTickers.get(i).equals(results.get(n).ticker())) {
+                    currentCompareTicker.add(n);
+                }
+            }
+
+            // Traverse each ticker found in result array and create a set of dates for each ticker.
+            // Each set of dates for each ticker is stored in ccd as (score, id)
+            for (int z = 0; z < workingDates.size(); z++) {
+                for (int n = 0; n < results.size(); n++) {
+                    if (workingDates.get(z).equals(results.get(n).date()) && currentCompareTicker.contains(n)) {
+                        ccdList.add((double) results.get(n).score());
+                        if (ccd.containsKey((double) results.get(n).score())) {
+                            List<Long> previousIds = new ArrayList<>(ccd.get((double) results.get(n).score()));
+                            previousIds.add(results.get(n).id());
+                            ccd.replace((double) results.get(n).score(), previousIds);
+                            previousIds.clear();
+                        } else {
+                            List<Long> id = new ArrayList<>();
+                            id.add(results.get(n).id());
+                            ccd.put((double) results.get(n).score(), id);
+                        }
+                    }
+                }
+
+                List<Double> outliers = new ArrayList<>(getOutliers(ccdList));
+                Double ccdMedian = getMedian(ccdList);
+
+                // Traverse list of outliers apply score modifier in results Array.
+                for (int n = 0; n < outliers.size(); n++) {
+                    int newScore = 0;
+                    String newFlag = null;
+                    for (int x = 0; x < results.size(); x++) {
+                         if (ccd.get(outliers.get(n)).size() != 0 &&
+                                 results.get(x).id() == ccd.get(outliers.get(n)).get(0)) {
+                            if(results.get(x).score() >= ccdMedian) {
+                                newScore = (int) (results.get(x).score() * incMod);
+                                newFlag = "Prediction was significantly better than other firms";
+                            }
+                            else {
+                                newScore = (int) (results.get(x).score() * decMod);
+                                newFlag = "Prediction was significantly worse than other firms";
+
+                            }
+                            // Set score
+                            results.get(x).setScore(newScore);
+                            // Add Flag
+                            ArrayList<String> flags = new ArrayList<>(results.get(x).flags());
+                            flags.add(newFlag);
+                            results.get(x).setFlags(flags);
+                         }
+                     }
+                }
+                ccdList.clear();
+                ccd.clear();
+            }
+            currentCompareTicker.clear();
+        }
+    }
+
+    /**
+     * This function does NOT produce statistically accurate results.
+     * Upper and lower bounds are tighter to make more room for outliers in a presumably small data set.
+     * If there become many financial firms involved, weight for bounds may need to be adjusted.
+     * @param input unsorted values. MINIMUM OF 5 REQUIRED.
+     * @return Any 'outliers' in a list.
+     */
+    public static List<Double> getOutliers(List<Double> input) {
+        Collections.sort(input);
+        List<Double> output = new ArrayList<>();
+        List<Double> data1 = new ArrayList<>();
+        List<Double> data2 = new ArrayList<>();
+        if (input.size() % 2 == 0) {
+            data1 = input.subList(0, input.size() / 2);
+            data2 = input.subList(input.size() / 2, input.size());
+        } else {
+            data1 = input.subList(0, input.size() / 2);
+            data2 = input.subList(input.size() / 2 + 1, input.size());
+        }
+        double q1 = getMedian(data1);
+        double q3 = getMedian(data2);
+        double iqr = q3 - q1;
+        double lowerFence = q1 - .3 * iqr;
+        double upperFence = q3 + .3 * iqr;
+        for (int i = 0; i < input.size(); i++) {
+            if (input.get(i) <= lowerFence || input.get(i) >= upperFence)
+                output.add(input.get(i));
+        }
+        return output;
+    }
+
+    /**
+     * Used to find median in a set of ordered values.
+     * @param data An ordered List of Double values
+     * @return Will return median as a double.
+     */
+    private static double getMedian(List<Double> data) {
+        if (data.size() % 2 == 0)
+            return (data.get(data.size() / 2) + data.get(data.size() / 2 - 1)) / 2;
+        else
+            return data.get(data.size() / 2);
+    }
+
+    private static void viewResult (ArrayList<Result> results) {
+        for (int x = 0; x < results.size(); x++) {
+            System.out.println("id: " + results.get(x).id() + " | firm: " + results.get(x).firm() +
+                    " | ticker: " + results.get(x).ticker() + " | score: " + results.get(x).score() +
+                    " | date: " + results.get(x).date());
+        }
+
+    }
+
+    /**
+     * This method is used for TESTING to view scores.
+     * @param firm The firm who made the prediction for the score being logged.
+     * @param ticker The ticker for which the prediction was made.
+     * @param score The prediction score.
+     * @param date The date that the prediction should be fulfilled.
+     * @param comments Any comments regarding the prediction.
+     * @param flags Any flags regarding the prediction.
+     */
+    private static void viewScore (String firm, String ticker, int score, String date, ArrayList<String> comments, ArrayList<String> flags) {
         System.out.println("firm: " + firm);
         System.out.println("ticker: " + ticker);
         System.out.println("score: " + score);
@@ -216,5 +428,3 @@ public class Analytics {
         System.out.println();
     }
 }
-
-
