@@ -11,10 +11,13 @@ public class Result {
     private String _date;
     private ArrayList<String> _comments;
     private ArrayList<String> _flags;
+    private Double _performDifference;
+
 
 
     // Define constructor.
-    public Result(long id, String firm, String ticker, int score, String date, ArrayList<String> comments, ArrayList<String> flags) {
+    public Result(long id, String firm, String ticker, int score, String date, ArrayList<String> comments,
+                  ArrayList<String> flags, Double performDifference) {
         _id = id;
         _firm = firm;
         _ticker = ticker;
@@ -22,6 +25,8 @@ public class Result {
         _date = date;
         _comments = comments;
         _flags = flags;
+        _performDifference = performDifference;
+
     }
 
     //TODO: Create method to print results object in meaningful way.
@@ -41,6 +46,8 @@ public class Result {
     public String date() {
         return _date;
     }
+
+    public Double performDifference() { return _performDifference; }
 
     public ArrayList<String> comments() { return _comments; }
 

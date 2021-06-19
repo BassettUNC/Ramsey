@@ -176,10 +176,10 @@ public class Analytics {
         // The following if block is used to set the base score based on performance difference.
         // For comments and flags, refer to ids file.
         if (performDifference >= 0) {
-            comments.add("Prediction was " + Math.abs(performDifference) + "% lower than actual stock performance.");
+            comments.add("Prediction was " + Math.abs(performDifference) + "% lower than actual stock performance");
             if (performDifference >= 0 && performDifference < .03) {
                 score = 94;
-                flags.add("Prediction was within 3% of stock performance.");
+                flags.add("Prediction was within 3% of stock performance");
             } else if (performDifference >= .03 && performDifference < .05) {
                 score = 90;
             } else if (performDifference >= .05 && performDifference < .1) {
@@ -196,20 +196,20 @@ public class Analytics {
                 score = 70;
             } else if (performDifference >= .35 && performDifference < .4) {
                 score = 65;
-                flags.add("Prediction was over 30% lower than actual stock performance.");
+                flags.add("Prediction was over 30% lower than actual stock performance");
             } else if (performDifference >= .4 && performDifference < .5) {
                 score = 65;
-                flags.add("Prediction was over 40% lower than actual stock performance.");
+                flags.add("Prediction was over 40% lower than actual stock performance");
             } else if (performDifference >= .5) {
-                flags.add("Prediction was over 50% lower than actual stock performance.");
+                flags.add("Prediction was over 50% lower than actual stock performance");
                 score = 60;
             }
         }
         if (performDifference < 0) {
-            comments.add("Prediction was " + Math.abs(performDifference) + "% higher than actual stock performance.");
+            comments.add("Prediction was " + Math.abs(performDifference) + "% higher than actual stock performance");
             if (performDifference < 0 && performDifference > -.03) {
                 score = 92;
-                flags.add("Prediction was within 3% of stock performance.");
+                flags.add("Prediction was within 3% of stock performance");
             } else if (performDifference <= -.03 && performDifference > -.05) {
                 score = 90;
             } else if (performDifference <= -.05 && performDifference > -.1) {
@@ -226,18 +226,18 @@ public class Analytics {
                 score = 40;
             } else if (performDifference <= -.35 && performDifference > -.4) {
                 score = 30;
-                flags.add("Prediction was over 30% higher than actual stock performance.");
+                flags.add("Prediction was over 30% higher than actual stock performance");
             } else if (performDifference <= .4 && performDifference > -.5) {
                 score = 20;
-                flags.add("Prediction was over 40% higher than actual stock performance.");
+                flags.add("Prediction was over 40% higher than actual stock performance");
             } else if (performDifference <= -.5) {
-                flags.add("Prediction was over 50% higher than actual stock performance.");
+                flags.add("Prediction was over 50% higher than actual stock performance");
                 score = 5;
             }
         }
 
         // Return type result
-        return new Result(System.nanoTime(), firm, tickerS, score, workingDate, comments, flags);
+        return new Result(System.nanoTime(), firm, tickerS, score, workingDate, comments, flags, performDifference);
     }
 
 
@@ -268,6 +268,7 @@ public class Analytics {
      * Compares one firms performance on a specific stock to others.
      * If an investment firm goes against others and is correct: increase score.
      * If an investment firm goes against others and is incorrect: decrease score.
+     * Also: increases score if stock all investment firms had <0 ccd performance scores.
      * @param results An array of type results.
      * @param incMod Modifier used to increase score when performance is better than most.
      * @param decMod Modifier used to decrease score performance is worse than most.
@@ -286,14 +287,17 @@ public class Analytics {
             }
         }
 
+        // CCD = Current Compare Date. Used to segregate all stock forecasts for a specific ticker on a specific day.
         // Initialize temp array to hold index values of all scores for particular ticker in results array.
         ArrayList<Integer> currentCompareTicker = new ArrayList<>();
-
         //Initialize temp TreeMap (must be sorted) to hold stock score, id pairs.
         TreeMap<Double, List<Long>> ccd = new TreeMap<>();
-
         // Initialize temp list to hold scores for particular ticker that share the same date in results array.
         List<Double> ccdList = new ArrayList<>();
+        // Initialize temp list to hold Performance Results for particular ticker that share the same date in results array.
+        List<Double> ccdListPD = new ArrayList<>();
+        // Initialize temp list to hold IDs for particular ticker that share the same date in results array.
+        List<Long> ccdListID = new ArrayList<>();
 
         // Traverse each ticker found in results array.
         for (int i = 0 ; i < workingTickers.size(); i ++) {
@@ -310,11 +314,12 @@ public class Analytics {
                 for (int n = 0; n < results.size(); n++) {
                     if (workingDates.get(z).equals(results.get(n).date()) && currentCompareTicker.contains(n)) {
                         ccdList.add((double) results.get(n).score());
+                        ccdListPD.add(results.get(n).performDifference());
+                        ccdListID.add(results.get(n).id());
                         if (ccd.containsKey((double) results.get(n).score())) {
                             List<Long> previousIds = new ArrayList<>(ccd.get((double) results.get(n).score()));
                             previousIds.add(results.get(n).id());
-                            ccd.replace((double) results.get(n).score(), previousIds);
-                            previousIds.clear();
+                            ccd.put((double) results.get(n).score(), previousIds);
                         } else {
                             List<Long> id = new ArrayList<>();
                             id.add(results.get(n).id());
@@ -323,6 +328,7 @@ public class Analytics {
                     }
                 }
 
+                // Create list of outliers and find median of scores in ccd.
                 List<Double> outliers = new ArrayList<>(getOutliers(ccdList));
                 Double ccdMedian = getMedian(ccdList);
 
@@ -340,7 +346,6 @@ public class Analytics {
                             else {
                                 newScore = (int) (results.get(x).score() * decMod);
                                 newFlag = "Prediction was significantly worse than other firms";
-
                             }
                             // Set score
                             results.get(x).setScore(newScore);
@@ -349,13 +354,39 @@ public class Analytics {
                             flags.add(newFlag);
                             results.get(x).setFlags(flags);
                          }
-                     }
+                        /* If all firms' stock performance's are sub-zero for a particular ticker on a particular
+                         date increase score for all. */
+                        if (allLoss(ccdListPD)) {
+                            if (ccdListID.contains(results.get(x).id())) {
+                                results.get(x).setScore((int) (results.get(x).score() * incMod));
+                                ArrayList<String> flags = new ArrayList<>(results.get(x).flags());
+                                flags.add("All firms did bad");
+                                results.get(x).setFlags(flags);
+                            }
+                        }
+                    }
                 }
+
                 ccdList.clear();
                 ccd.clear();
+                ccdListPD.clear();
+                ccdListID.clear();
             }
             currentCompareTicker.clear();
         }
+    }
+
+    /**
+     * Helper method used to determine if all stock performance results are negative.
+     * @param performanceData List of performanceData for a given set of stocks
+     * @return true if all evaluations are negative.
+     */
+    private static boolean allLoss (List<Double> performanceData) {
+        Double maxValue = -Double.MAX_VALUE;
+        for (int n = 0; n < performanceData.size(); n++) {
+            if (performanceData.get(n) > maxValue) { maxValue = performanceData.get(n);}
+        }
+        return maxValue < 0.0;
     }
 
     /**
@@ -405,7 +436,7 @@ public class Analytics {
         for (int x = 0; x < results.size(); x++) {
             System.out.println("id: " + results.get(x).id() + " | firm: " + results.get(x).firm() +
                     " | ticker: " + results.get(x).ticker() + " | score: " + results.get(x).score() +
-                    " | date: " + results.get(x).date());
+                    " | date: " + results.get(x).date() + " | flags: " + results.get(x).flags());
         }
 
     }
