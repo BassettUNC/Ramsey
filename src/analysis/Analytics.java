@@ -12,16 +12,15 @@ public class Analytics {
         completeComparison(parsePrediction("src/analysis/data/Forecasts.csv"));
     }
 
-
     /**
-     * This method traverses a forecasts csv and passes
-     * data to scoring methods in a systematic manner.
+     * This method traverses a forecasts csv and adds
+     * identification and scoring data to a results map.
      * It reads each row individually and iterates through
      * the rows columns.
      * @param path Path to the forecast csv.
      * @return Arraylist of all results.
      */
-    private static ArrayList<Result> parsePrediction(String path) {
+    private static HashMap<Long, Result> parsePrediction(String path) {
         // Create scanner line object if file exists. Otherwise, die.
         Scanner csvReader = null;
         try {
@@ -47,7 +46,7 @@ public class Analytics {
         String firm = null;
 
         ArrayList<Result> results = new ArrayList<>();
-
+        HashMap<Long, Result> resultsHash = new HashMap<>();
 
         // Begin Readings csv file.
         while (csvReader.hasNextLine()) {
@@ -101,8 +100,14 @@ public class Analytics {
                         String tickerString = tempTickers.get(i);
 
                         // Add results of directComparison to array.
-                        results.add(directComparison(controlDate, workingDate,
-                                predicted, tickerStock, tickerString, firm));
+                        //results.add(directComparison(controlDate, workingDate,
+                        //        predicted, tickerStock, tickerString, firm));
+
+                        // Temp test code.
+                        Result result = directComparison(controlDate, workingDate, predicted, tickerStock, tickerString, firm);
+                        results.add(result);
+                        resultsHash.put(results.get(results.size() -1).id(), result);
+
                         i++; // increase counter for cell #.
                     }
                 } catch (NullPointerException e) {
@@ -114,7 +119,7 @@ public class Analytics {
             n ++; // Increase counter for line number.
         }
         csvReader.close();
-        return results;
+        return resultsHash;
     }
 
 
@@ -145,7 +150,6 @@ public class Analytics {
     private static Double stockPerformance(String start, String stop, Stock ticker) {
         return (ticker.close(stop) - ticker.close(start))/ticker.close(start);
     }
-
 
     /**
      * Compares stock prediction with historical stock performance
@@ -236,26 +240,32 @@ public class Analytics {
         }
 
         // Return type result
+        // There is a 'bug' with the nano time that allocates ids in a non-standard manner.
         return new Result(System.nanoTime(), firm, tickerS, score, workingDate, comments, flags, performDifference);
     }
-
 
     /**
      * Calls methods used to compare stock scores to one another.
      * Used to generate score modifiers.
-     * @param results requires an arraylist of of objects type result.
+     * @param results requires an arraylist of objects of type result.
      */
-    public static void completeComparison(ArrayList<Result> results) {
-        // If an investment firm goes against others and is correct: increase score.
-        // If an investment firm goes against others and is incorrect: decrease score.
-        // If all investment firms are incorrect: increase score.
+    public static void completeComparison(HashMap<Long, Result> results) {
+        /* If an investment firm goes against others and is correct: increase score.
+        If an investment firm goes against others and is incorrect: decrease score.
+        If all investment firms are incorrect: increase score. */
+        viewResult(results);
+        System.out.println();
         Double fvfINC = 1.1;
         Double fvfDEC = 0.8;
-        firmVsFirm(results, fvfINC, fvfDEC);
-        firmReputation(results, fvfINC, fvfDEC);
+       firmVsFirm(results, fvfINC, fvfDEC);
+
+        // TODO: If a firm’s overall rating (reputation) is high: increase score.
+        Double frfINC = 2.1;
+        Double frfDEC = 0.8;
+        firmReputation(results, frfINC, frfDEC);
+
         // TODO: If a firm's past predictions on a stock are good: increase score.
         // TODO: If a firm's past predictions on a stock are bad: decrease score.
-        // TODO: If a firm’s overall rating (reputation) is high: increase score.
         // TODO: If stock has been historically nonvolatile, and a firm’s prediction is bad: decrease score.
         // TODO: If stock has been historically volatile, and a firm’s prediction is good: increase score.
 
@@ -269,16 +279,17 @@ public class Analytics {
      * If an investment firm goes against others and is correct: increase score.
      * If an investment firm goes against others and is incorrect: decrease score.
      * Also: increases score if stock all investment firms had <0 ccd performance scores.
-     * @param results An array of type results.
+     * @param results Results Hashmap.
      * @param incMod Modifier used to increase score when performance is better than most.
      * @param decMod Modifier used to decrease score performance is worse than most.
      */
-    private static void firmVsFirm(ArrayList<Result> results, Double incMod, Double decMod) {
+    private static void firmVsFirm(HashMap<Long, Result> results, Double incMod, Double decMod) {
+
         ArrayList<String> workingTickers = new ArrayList<>();
         ArrayList<String> workingDates = new ArrayList<>();
 
         // Build list of tickers and included dates
-        for (Result result : results) {
+        for (Result result : results.values()) {
             if (!workingTickers.contains(result.ticker())) {
                 workingTickers.add(result.ticker());
             }
@@ -288,8 +299,8 @@ public class Analytics {
         }
 
         // CCD = Current Compare Date. Used to segregate all stock forecasts for a specific ticker on a specific day.
-        // Initialize temp array to hold index values of all scores for particular ticker in results array.
-        ArrayList<Integer> currentCompareTicker = new ArrayList<>();
+        // Initialize temp array to hold id values of all scores for particular ticker in results array.
+        ArrayList<Long> currentCompareTicker = new ArrayList<>();
         //Initialize temp TreeMap (must be sorted) to hold stock score, id pairs.
         TreeMap<Double, List<Long>> ccd = new TreeMap<>();
         // Initialize temp list to hold scores for particular ticker that share the same date in results array.
@@ -302,28 +313,27 @@ public class Analytics {
         // Traverse each ticker found in results array.
         for (String workingTicker : workingTickers) {
             // Create currentCompareTicker.
-            for (int n = 0; n < results.size(); n++) {
-                if (workingTicker.equals(results.get(n).ticker())) {
-                    currentCompareTicker.add(n);
+            for (Result result : results.values()) {
+                if (workingTicker.equals(result.ticker())) {
+                    currentCompareTicker.add(result.id());
                 }
             }
-
             // Traverse each ticker found in result array and create a set of dates for each ticker.
             // Each set of dates for each ticker is stored in ccd as (score, id)
             for (String workingDate : workingDates) {
-                for (int n = 0; n < results.size(); n++) {
-                    if (workingDate.equals(results.get(n).date()) && currentCompareTicker.contains(n)) {
-                        ccdList.add((double) results.get(n).score());
-                        ccdListPD.add(results.get(n).performDifference());
-                        ccdListID.add(results.get(n).id());
-                        if (ccd.containsKey((double) results.get(n).score())) {
-                            List<Long> previousIds = new ArrayList<>(ccd.get((double) results.get(n).score()));
-                            previousIds.add(results.get(n).id());
-                            ccd.put((double) results.get(n).score(), previousIds);
+                for (Result result : results.values()) {
+                    if (workingDate.equals(result.date()) && currentCompareTicker.contains(result.id())) {
+                        ccdList.add((double) result.score());
+                        ccdListPD.add(result.performDifference());
+                        ccdListID.add(result.id());
+                        if (ccd.containsKey((double) result.score())) {
+                            List<Long> previousIds = new ArrayList<>(ccd.get((double) result.score()));
+                            previousIds.add(result.id());
+                            ccd.put((double) result.score(), previousIds);
                         } else {
                             List<Long> id = new ArrayList<>();
-                            id.add(results.get(n).id());
-                            ccd.put((double) results.get(n).score(), id);
+                            id.add(result.id());
+                            ccd.put((double) result.score(), id);
                         }
                     }
                 }
@@ -336,7 +346,7 @@ public class Analytics {
                 for (Double outlier : outliers) {
                     int newScore;
                     String newFlag;
-                    for (Result result : results) {
+                    for (Result result : results.values()) {
                         if (ccd.get(outlier).size() != 0 &&
                                 result.id() == ccd.get(outlier).get(0)) {
                             if (result.score() >= ccdMedian) {
@@ -359,7 +369,7 @@ public class Analytics {
                             if (ccdListID.contains(result.id())) {
                                 result.setScore((int) (result.score() * incMod));
                                 ArrayList<String> flags = new ArrayList<>(result.flags());
-                                flags.add("All firms did bad");
+                                flags.add("All firms performed poorly");
                                 result.setFlags(flags);
                             }
                         }
@@ -375,11 +385,18 @@ public class Analytics {
         }
     }
 
-    private static void firmReputation(ArrayList<Result> results, Double incMod, Double decMod) {
+    /**
+     * Exams all of firm's stock prediction performances and will increase all scores if overall
+     * performance is good, and decrease if overall performance is poor.
+     * @param results Results hashmap.
+     * @param incMod Modifier used to increase score.
+     * @param decMod Modifier used to decrease score.
+     */
+    private static void firmReputation(HashMap<Long, Result> results, Double incMod, Double decMod) {
         HashMap<String, ArrayList<Long>> firmResults = new HashMap<>();
 
         // Create hashmap that contains keys of firms and values that are a list of a respective firm's result ids.
-        for(Result result: results) {
+        for(Result result: results.values()) {
             if (firmResults.containsKey(result.firm())) {
                 ArrayList<Long> ids = firmResults.get(result.firm());
                 ids.add(result.id());
@@ -391,29 +408,32 @@ public class Analytics {
             }
         }
 
-        //TODO: Results arraylist needs to be an hashmap.
-
         // Find firms` average score and add to new hashmap.
         HashMap<String, Integer> averageScores = new HashMap<>();
         for(String firm: firmResults.keySet()) {
             ArrayList<Long> ids = firmResults.get(firm);
             int averageScore = 0;
             for (Long id: ids) {
-                averageScore += getId(results, id).score();
+                averageScore += results.get(id).score();
             }
+            // If average firm score is greater than 70, increase all the firm's scores.
             if (averageScore / ids.size() > 70) {
                 for (Long id: ids) {
-                    getId(results, id).setScore((int) (getId(results, id).score() * incMod));
+                    results.get(id).setScore((int) (results.get(id).score() * incMod));
+                }
+            }
+            // If average firm score is less than 30, decrease all the firm's scores.
+            if (averageScore / ids.size() < 30) {
+                for (Long id: ids) {
+                    results.get(id).setScore((int) (results.get(id).score() * decMod));
                 }
             }
             averageScores.put(firm, averageScore / ids.size());
         }
 
 
-        System.out.println(firmResults);
+       // System.out.println(firmResults);
         System.out.println(averageScores);
-
-
     }
 
     /**
@@ -472,8 +492,8 @@ public class Analytics {
             return data.get(data.size() / 2);
     }
 
-    private static void viewResult (ArrayList<Result> results) {
-        for (Result result : results) {
+    private static void viewResult (HashMap<Long, Result> results) {
+        for (Result result : results.values()) {
             System.out.println("id: " + result.id() + " | firm: " + result.firm() +
                     " | ticker: " + result.ticker() + " | score: " + result.score() +
                     " | date: " + result.date() + " | flags: " + result.flags());
