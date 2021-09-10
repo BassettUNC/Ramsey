@@ -8,9 +8,6 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 
 public class Analytics {
-    public static void main(String[] args) {
-        completeComparison(parsePrediction("src/analysis/data/Forecasts.csv"));
-    }
 
     /**
      * This method traverses a forecasts csv and adds
@@ -20,7 +17,7 @@ public class Analytics {
      * @param path Path to the forecast csv.
      * @return Arraylist of all results.
      */
-    private static HashMap<Long, Result> parsePrediction(String path) {
+    public static HashMap<Long, Result> parsePrediction(String path) {
         // Create scanner line object if file exists. Otherwise, die.
         Scanner csvReader = null;
         try {
@@ -48,7 +45,7 @@ public class Analytics {
         ArrayList<Result> results = new ArrayList<>();
         HashMap<Long, Result> resultsHash = new HashMap<>();
 
-        // Begin Readings csv file.
+        // Begin reading csv file.
         while (csvReader.hasNextLine()) {
             // Create new scanner object to traverse each line.
             Scanner csvLine = new Scanner(csvReader.nextLine());
@@ -99,11 +96,6 @@ public class Analytics {
                         Stock tickerStock = tickers.get(tempTickers.get(i));
                         String tickerString = tempTickers.get(i);
 
-                        // Add results of directComparison to array.
-                        //results.add(directComparison(controlDate, workingDate,
-                        //        predicted, tickerStock, tickerString, firm));
-
-                        // Temp test code.
                         Result result = directComparison(controlDate, workingDate, predicted, tickerStock, tickerString, firm);
                         results.add(result);
                         resultsHash.put(results.get(results.size() -1).id(), result);
@@ -122,7 +114,6 @@ public class Analytics {
         return resultsHash;
     }
 
-
     /**
      * Convert date as string object to Date object
      * @param date Date as a string.
@@ -138,7 +129,6 @@ public class Analytics {
             return null;
         }
     }
-
 
     /**
      * Return percent growth or loss for a stock over the start and stop dates.
@@ -253,13 +243,10 @@ public class Analytics {
         /* If an investment firm goes against others and is correct: increase score.
         If an investment firm goes against others and is incorrect: decrease score.
         If all investment firms are incorrect: increase score. */
-        viewResult(results);
-        System.out.println();
         Double fvfINC = 1.1;
         Double fvfDEC = 0.8;
        firmVsFirm(results, fvfINC, fvfDEC);
-
-        // TODO: If a firm’s overall rating (reputation) is high: increase score.
+        //If a firm’s overall rating (reputation) is high: increase score.
         Double frfINC = 2.1;
         Double frfDEC = 0.8;
         firmReputation(results, frfINC, frfDEC);
@@ -430,10 +417,6 @@ public class Analytics {
             }
             averageScores.put(firm, averageScore / ids.size());
         }
-
-
-       // System.out.println(firmResults);
-        System.out.println(averageScores);
     }
 
     /**

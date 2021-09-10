@@ -29,8 +29,6 @@ public class Result {
 
     }
 
-    //TODO: Create method to print results object in meaningful way.
-
     public long id() {
         return _id;
     }
